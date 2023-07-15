@@ -32,9 +32,11 @@ import           Control.Monad.Reader
 import           Control.Monad.Trans.Resource
 import           Data.Either
 import           Data.Functor
+import           Data.List                      ( foldl1', intersect )
 import           Data.Maybe
 import           Haskus.Utils.Variant.Excepts
 import           Options.Applicative     hiding ( style )
+import           Options.Applicative.Types      ( Completer (..) )
 import           Options.Applicative.Help.Pretty ( text )
 import           Prelude                 hiding ( appendFile )
 import           System.Exit
@@ -54,6 +56,7 @@ data InstallCommand = InstallGHC InstallOptions
                     | InstallCabal InstallOptions
                     | InstallHLS InstallOptions
                     | InstallStack InstallOptions
+                    | InstallAll InstallOptions
 
 
 
@@ -131,6 +134,15 @@ installParser =
                  <> footerDoc (Just $ text installStackFooter)
                  )
            )
+      <> command
+           "all"
+           (   InstallAll
+           <$> info
+                 (installAllOpts <**> helper)
+                 (  progDesc "Install all tools"
+                 <> footerDoc (Just $ text installAllFooter)
+                 )
+           )
       )
     )
     <|> (Right <$> installOpts Nothing)
@@ -171,6 +183,20 @@ Examples:
   # install GHC head fedora bindist
   ghcup install ghc -u 'https://gitlab.haskell.org/ghc/ghc/-/jobs/artifacts/master/raw/ghc-x86_64-linux-fedora33-release.tar.xz?job=x86_64-linux-fedora33-release' head|]
 
+  installAllFooter :: String
+  installAllFooter = [s|Discussion:
+  Installs tagged versions of each tool:
+  - GHC
+  - cabal-install
+  - stack
+  - haskell-language-server
+
+Examples:
+  # install recommended versions of each tool
+  ghcup install all recommended
+
+  # install latest versions of each tool
+  ghcup install all latest|]
 
 installOpts :: Maybe Tool -> Parser InstallOptions
 installOpts tool =
@@ -210,6 +236,37 @@ installOpts tool =
     Just _   -> True
 
 
+installAllOpts :: Parser InstallOptions
+installAllOpts =
+  InstallOptions
+    <$> (Just <$> argument (ToolTag <$> eitherReader tagEither)
+      (  metavar "TAG"
+      <> completer tagCompleter'
+      ))
+    <*> pure Nothing
+    <*> fmap (fromMaybe False) (invertableSwitch "set" Nothing False
+      (help "Set as active version after install"))
+    <*> optional
+          (option
+           (eitherReader isolateParser)
+           (  short 'i'
+           <> long "isolate"
+           <> metavar "DIR"
+           <> help "install in an isolated dir instead of the default one"
+           <> completer (bashCompleter "directory")
+           )
+          )
+    <*> switch
+          (short 'f' <> long "force" <> help "Force install (THIS IS UNSAFE, only use it in Dockerfiles or CI)")
+    <*> many (argument str (metavar "CONFIGURE_ARGS" <> help "Additional arguments to bindist configure, prefix with '-- ' (longopts)"))
+ where
+  tagCompleter' :: Completer
+  tagCompleter' = mkCompleter $ \part -> do
+    tagGroups <- forM [GHC, Cabal, Stack, HLS] $ \tool ->
+      runCompleter (tagCompleter tool []) part
+    pure $ case tagGroups of
+      [] -> []
+      _ -> foldl1' intersect tagGroups
 
 
     --------------
@@ -221,7 +278,7 @@ installToolFooter :: String
 installToolFooter = [s|Discussion:
   Installs GHC or cabal. When no command is given, installs GHC
   with the specified version/tag.
-  It is recommended to always specify a subcommand (ghc/cabal/hls/stack).|]
+  It is recommended to always specify a subcommand (ghc/cabal/hls/stack/all).|]
 
 
 
@@ -316,6 +373,9 @@ install installCommand settings getAppState' runLogger = case installCommand of
   (Left (InstallCabal iopts)) -> installCabal iopts
   (Left (InstallHLS iopts)) -> installHLS iopts
   (Left (InstallStack iopts)) -> installStack iopts
+  (Left (InstallAll iopts)) -> do
+    codes <- mapM ($ iopts) [installGHC, installCabal, installStack, installHLS]
+    pure (maximum codes)
  where
   installGHC :: InstallOptions -> IO ExitCode
   installGHC InstallOptions{..} = do
