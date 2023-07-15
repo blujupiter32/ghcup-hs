@@ -83,6 +83,7 @@ jobs:
   build-arm:
     name: Build ARM binary
     runs-on: ${{ matrix.os }}
+    if: github.repository_owner == 'haskell'
     env:
       CABAL_VER: 3.10.1.0
       JSON_VERSION: "0.0.7"
@@ -156,6 +157,7 @@ jobs:
   build-macwin:
     name: Build binary (Mac/Win)
     runs-on: ${{ matrix.os }}
+    if: github.repository_owner == 'haskell'
     env:
       CABAL_VER: 3.10.1.0
       MACOSX_DEPLOYMENT_TARGET: 10.13
@@ -327,6 +329,7 @@ jobs:
     name: Test ARM
     needs: "build-arm"
     runs-on: ${{ matrix.os }}
+    if: github.repository_owner == 'haskell'
     env:
       CABAL_VER: 3.10.1.0
       JSON_VERSION: "0.0.7"
@@ -394,6 +397,7 @@ jobs:
     name: Test Mac/Win
     needs: "build-macwin"
     runs-on: ${{ matrix.os }}
+    if: github.repository_owner == 'haskell'
     env:
       CABAL_VER: 3.10.1.0
       MACOSX_DEPLOYMENT_TARGET: 10.13
