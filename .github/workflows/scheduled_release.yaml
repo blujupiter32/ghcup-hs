@@ -1,0 +1,10 @@
+name: Build and release (scheduled)
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  release:
+    name: Build and release
+    uses: ./.github/workflows/release.yaml
